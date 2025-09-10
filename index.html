@@ -19,12 +19,6 @@
         <h1 class="text-3xl sm:text-4xl font-extrabold text-center mb-2 text-indigo-700">Correct the Mistake!</h1>
         <p class="text-center text-gray-600 mb-6">Simple Present & Simple Past A1 Grammar Game</p>
 
-        <!-- User ID Display -->
-        <div class="mb-6 bg-gray-100 p-3 rounded-lg">
-            <h3 class="font-bold text-gray-700 mb-1">Your User ID:</h3>
-            <p id="user-id" class="text-sm font-mono text-gray-800 break-words"></p>
-        </div>
-
         <!-- Question Section -->
         <div id="question-card" class="bg-indigo-50 p-6 rounded-lg shadow-inner mb-6 transition-transform transform">
             <div class="flex items-center justify-between mb-2">
@@ -48,11 +42,6 @@
         <div class="mb-6">
             <label for="answer-input" class="block text-lg font-bold mb-2">Your Corrected Answer:</label>
             <input type="text" id="answer-input" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition" placeholder="Type the corrected answer here...">
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4 mb-6">
-            <button id="save-btn" class="w-full sm:w-auto px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition duration-300 shadow-md">Save Answer</button>
         </div>
 
         <!-- Navigation Buttons -->
@@ -84,23 +73,7 @@
         </div>
     </div>
 
-    <!-- Firebase Scripts -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        setLogLevel('Debug');
-
-        // Global variables for Firebase
-        let app;
-        let db;
-        let auth;
-        let userId;
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
         // Game Data & State
         const questions = [
             { id: 1, questionWithMistake: "What are your hobbies is?", answerWithMistake: "I are like drawing.", correctQuestion: "What are your hobbies?", correctAnswer: "I like drawing." },
@@ -131,48 +104,23 @@
         ];
 
         let currentQuestionIndex = 0;
+        let answers = []; // Stores answers locally
 
         const questionNumberEl = document.getElementById('question-number');
         const questionMistakeEl = document.getElementById('question-mistake');
         const answerMistakeEl = document.getElementById('answer-mistake');
         const questionInput = document.getElementById('question-input');
         const answerInput = document.getElementById('answer-input');
-        const saveBtn = document.getElementById('save-btn');
         const generateFileBtn = document.getElementById('generate-file-btn');
         const prevBtn = document.getElementById('prev-btn');
         const nextBtn = document.getElementById('next-btn');
         const answersListEl = document.getElementById('answers-list');
-        const userIdEl = document.getElementById('user-id');
         const modal = document.getElementById('modal');
         const modalTitle = document.getElementById('modal-title');
         const modalMessage = document.getElementById('modal-message');
         const modalCloseBtn = document.getElementById('modal-close-btn');
 
-        // Initialize Firebase and Auth
-        async function initializeFirebase() {
-            try {
-                if (Object.keys(firebaseConfig).length) {
-                    app = initializeApp(firebaseConfig);
-                    db = getFirestore(app);
-                    auth = getAuth(app);
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                    userId = auth.currentUser.uid;
-                    userIdEl.textContent = userId;
-                    fetchAnswers();
-                } else {
-                    showModal("Firebase Error", "Firebase configuration is missing. The application will not be able to save your answers. You can still play the game locally.");
-                    console.error("Firebase config is missing.");
-                }
-            } catch (error) {
-                showModal("Authentication Error", `Failed to authenticate with Firebase: ${error.message}. You can still play the game locally.`);
-                console.error("Firebase Authentication Error:", error);
-            }
-        }
-
+        // Modal functions
         function showModal(title, message) {
             modalTitle.textContent = title;
             modalMessage.textContent = message;
@@ -191,125 +139,103 @@
             questionNumberEl.textContent = `Question ${currentQuestionIndex + 1} of ${questions.length}`;
             questionMistakeEl.textContent = question.questionWithMistake;
             answerMistakeEl.textContent = question.answerWithMistake;
-            questionInput.value = '';
-            answerInput.value = '';
+
+            const existingAnswer = answers.find(a => a.questionId === question.id);
+            questionInput.value = existingAnswer ? existingAnswer.userQuestion : '';
+            answerInput.value = existingAnswer ? existingAnswer.userAnswer : '';
             
             prevBtn.disabled = currentQuestionIndex === 0;
             nextBtn.disabled = currentQuestionIndex === questions.length - 1;
         }
 
-        async function saveAnswer(answerData) {
-            if (!db || !userId) {
-                console.warn("Firestore not initialized. Answer will not be saved.");
+        function saveAnswer() {
+            const userQuestion = questionInput.value.trim();
+            const userAnswer = answerInput.value.trim();
+            const currentQuestion = questions[currentQuestionIndex];
+
+            if (!userQuestion && !userAnswer) {
+                // Do not save if both fields are empty
                 return;
             }
 
-            const docRef = doc(db, `artifacts/${appId}/users/${userId}/game-answers`, `q${answerData.questionId}`);
-            
+            const answerData = {
+                questionId: currentQuestion.id,
+                userQuestion: userQuestion,
+                userAnswer: userAnswer
+            };
+
+            const existingIndex = answers.findIndex(a => a.questionId === currentQuestion.id);
+            if (existingIndex !== -1) {
+                answers[existingIndex] = answerData;
+            } else {
+                answers.push(answerData);
+            }
+            answers.sort((a, b) => a.questionId - b.questionId);
+            localStorage.setItem('grammarGameAnswers', JSON.stringify(answers));
+            updateAnswersList();
+        }
+
+        function loadAnswers() {
             try {
-                await setDoc(docRef, answerData);
-                console.log("Answer saved successfully!");
-                showModal("Success!", "Your answer has been saved.");
+                const storedAnswers = localStorage.getItem('grammarGameAnswers');
+                if (storedAnswers) {
+                    answers = JSON.parse(storedAnswers);
+                    updateAnswersList();
+                }
             } catch (e) {
-                console.error("Error saving document: ", e);
-                showModal("Error", "Failed to save your answer. Please check the console for details.");
+                console.error("Failed to load answers from local storage:", e);
+                showModal("Data Error", "Failed to load previous answers. Your browser may have local storage disabled.");
             }
         }
 
-        function fetchAnswers() {
-            if (!db || !userId) {
-                console.warn("Firestore not initialized. Cannot fetch answers.");
+        function updateAnswersList() {
+            answersListEl.innerHTML = '';
+            if (answers.length === 0) {
+                answersListEl.innerHTML = '<p class="text-gray-500 text-center">Your submitted answers will appear here.</p>';
                 return;
             }
-
-            const answersColRef = collection(db, `artifacts/${appId}/users/${userId}/game-answers`);
-            onSnapshot(answersColRef, (snapshot) => {
-                answersListEl.innerHTML = '';
-                if (snapshot.empty) {
-                    answersListEl.innerHTML = '<p class="text-gray-500 text-center">Your submitted answers will appear here.</p>';
-                    return;
-                }
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    answersListEl.innerHTML += `
-                        <div class="p-4 rounded-lg shadow-sm border border-gray-200">
-                            <p class="font-semibold text-gray-900">Q${data.questionId}:</p>
-                            <p class="text-sm">Your Corrected Q: <span class="font-medium">${data.userQuestion}</span></p>
-                            <p class="text-sm">Your Corrected A: <span class="font-medium">${data.userAnswer}</span></p>
-                        </div>
-                    `;
-                });
+            answers.forEach(data => {
+                answersListEl.innerHTML += `
+                    <div class="p-4 rounded-lg shadow-sm border border-gray-200">
+                        <p class="font-semibold text-gray-900">Q${data.questionId}:</p>
+                        <p class="text-sm">Your Corrected Q: <span class="font-medium">${data.userQuestion}</span></p>
+                        <p class="text-sm">Your Corrected A: <span class="font-medium">${data.userAnswer}</span></p>
+                    </div>
+                `;
             });
         }
 
         // Event Listeners
-        saveBtn.addEventListener('click', () => {
-            const userQuestion = questionInput.value.trim();
-            const userAnswer = answerInput.value.trim();
-
-            if (!userQuestion || !userAnswer) {
-                showModal("Empty Answer", "Please fill in both the corrected question and answer before saving.");
+        generateFileBtn.addEventListener('click', () => {
+            if (answers.length === 0) {
+                showModal("No Answers", "Please save at least one answer before generating a file.");
                 return;
             }
 
-            const currentQuestion = questions[currentQuestionIndex];
-            const answerData = {
-                questionId: currentQuestion.id,
-                userQuestion: userQuestion,
-                userAnswer: userAnswer,
-                timestamp: new Date().toISOString()
-            };
-
-            // Save text answer
-            saveAnswer(answerData);
-        });
-
-        generateFileBtn.addEventListener('click', async () => {
-            if (!db || !userId) {
-                showModal("Error", "Firestore is not initialized. Cannot generate the file.");
-                return;
-            }
-
-            try {
-                const answersRef = collection(db, `artifacts/${appId}/users/${userId}/game-answers`);
-                const querySnapshot = await getDocs(answersRef);
-                
-                let fileContent = `My Grammar Game Answers\n\n`;
-                fileContent += `This is a summary of your submitted answers. You can use this to review your work.\n\n`;
-                
-                const submittedAnswers = [];
-                querySnapshot.forEach(doc => {
-                    submittedAnswers.push(doc.data());
-                });
-
-                // Sort answers by question ID
-                submittedAnswers.sort((a, b) => a.questionId - b.questionId);
-
-                submittedAnswers.forEach(data => {
-                    const originalQuestion = questions.find(q => q.id === data.questionId);
-                    if (originalQuestion) {
-                        fileContent += `--------------------------------
+            let fileContent = `My Grammar Game Answers\n\n`;
+            fileContent += `This is a summary of your submitted answers. You can use this to review your work.\n\n`;
+            
+            answers.forEach(data => {
+                const originalQuestion = questions.find(q => q.id === data.questionId);
+                if (originalQuestion) {
+                    fileContent += `--------------------------------
 Question ${data.questionId}
 Original Q: "${originalQuestion.questionWithMistake}"
 Original A: "${originalQuestion.answerWithMistake}"
 Your Corrected Q: "${data.userQuestion}"
 Your Corrected A: "${data.userAnswer}"\n\n`;
-                    }
-                });
+                }
+            });
 
-                const finalContent = fileContent;
-                
-                console.log(`\n\`\`\`text:Answer Sheet:answer_sheet.txt\n${finalContent}\n\`\`\`eof`);
-                showModal("Success", "Your answer sheet is being generated!");
-
-            } catch (error) {
-                console.error("Error generating file: ", error);
-                showModal("Error", "Failed to generate the answer sheet. Please check the console for details.");
-            }
+            const finalContent = fileContent;
+            
+            console.log(`\n\`\`\`text:Answer Sheet:answer_sheet.txt\n${finalContent}\n\`\`\`eof`);
+            showModal("Success", "Your answer sheet is being generated!");
         });
         
         prevBtn.addEventListener('click', () => {
             if (currentQuestionIndex > 0) {
+                saveAnswer(); // Save before moving
                 currentQuestionIndex--;
                 renderQuestion();
             }
@@ -317,6 +243,7 @@ Your Corrected A: "${data.userAnswer}"\n\n`;
         
         nextBtn.addEventListener('click', () => {
             if (currentQuestionIndex < questions.length - 1) {
+                saveAnswer(); // Save before moving
                 currentQuestionIndex++;
                 renderQuestion();
             }
@@ -324,7 +251,7 @@ Your Corrected A: "${data.userAnswer}"\n\n`;
 
         // Initialize on window load
         window.onload = () => {
-            initializeFirebase();
+            loadAnswers();
             renderQuestion();
         };
     </script>
