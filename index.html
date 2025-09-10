@@ -274,7 +274,7 @@
                 const answersRef = collection(db, `artifacts/${appId}/users/${userId}/game-answers`);
                 const querySnapshot = await getDocs(answersRef);
                 
-                let fileContent = `# My Grammar Game Answers\n\n`;
+                let fileContent = `My Grammar Game Answers\n\n`;
                 fileContent += `This is a summary of your submitted answers. You can use this to review your work.\n\n`;
                 
                 const submittedAnswers = [];
@@ -288,18 +288,18 @@
                 submittedAnswers.forEach(data => {
                     const originalQuestion = questions.find(q => q.id === data.questionId);
                     if (originalQuestion) {
-                        fileContent += `---
-### Question ${data.questionId}
-* **Original Q:** "${originalQuestion.questionWithMistake}"
-* **Original A:** "${originalQuestion.answerWithMistake}"
-* **Your Corrected Q:** "${data.userQuestion}"
-* **Your Corrected A:** "${data.userAnswer}"\n\n`;
+                        fileContent += `--------------------------------
+Question ${data.questionId}
+Original Q: "${originalQuestion.questionWithMistake}"
+Original A: "${originalQuestion.answerWithMistake}"
+Your Corrected Q: "${data.userQuestion}"
+Your Corrected A: "${data.userAnswer}"\n\n`;
                     }
                 });
 
                 const finalContent = fileContent;
                 
-                console.log(`\n\`\`\`markdown:Answer Sheet:answer_sheet.md\n${finalContent}\n\`\`\`eof`);
+                console.log(`\n\`\`\`text:Answer Sheet:answer_sheet.txt\n${finalContent}\n\`\`\`eof`);
                 showModal("Success", "Your answer sheet is being generated!");
 
             } catch (error) {
