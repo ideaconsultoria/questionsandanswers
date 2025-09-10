@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Correct the Mistake - Grammar Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            color: #1f2937;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8 flex flex-col items-center min-h-screen">
+    <div id="game-container" class="bg-white p-6 sm:p-10 rounded-xl shadow-2xl max-w-2xl w-full">
+        <h1 class="text-3xl sm:text-4xl font-extrabold text-center mb-2 text-indigo-700">Correct the Mistake!</h1>
+        <p class="text-center text-gray-600 mb-6">Simple Present & Simple Past A1 Grammar Game</p>
+
+        <!-- User ID Display -->
+        <div class="mb-6 bg-gray-100 p-3 rounded-lg">
+            <h3 class="font-bold text-gray-700 mb-1">Your User ID:</h3>
+            <p id="user-id" class="text-sm font-mono text-gray-800 break-words"></p>
+        </div>
+
+        <!-- Question Section -->
+        <div id="question-card" class="bg-indigo-50 p-6 rounded-lg shadow-inner mb-6 transition-transform transform">
+            <div class="flex items-center justify-between mb-2">
+                <span id="question-number" class="text-sm font-semibold text-indigo-800">Question 1 of 50</span>
+            </div>
+            <div class="mb-4">
+                <p class="text-lg text-gray-800 font-bold mb-1">Question with a Mistake:</p>
+                <p id="question-mistake" class="text-xl sm:text-2xl font-bold text-gray-800"></p>
+            </div>
+            <div>
+                <p class="text-lg text-gray-800 font-bold mb-1">Answer with a Mistake:</p>
+                <p id="answer-mistake" class="text-xl sm:text-2xl font-bold text-gray-800"></p>
+            </div>
+        </div>
+
+        <!-- Correction Input -->
+        <div class="mb-6">
+            <label for="question-input" class="block text-lg font-bold mb-2">Your Corrected Question:</label>
+            <input type="text" id="question-input" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition" placeholder="Type the corrected question here...">
+        </div>
+        <div class="mb-6">
+            <label for="answer-input" class="block text-lg font-bold mb-2">Your Corrected Answer:</label>
+            <input type="text" id="answer-input" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition" placeholder="Type the corrected answer here...">
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4 mb-6">
+            <button id="save-btn" class="w-full sm:w-auto px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition duration-300 shadow-md">Save Answer</button>
+        </div>
+
+        <!-- Navigation Buttons -->
+        <div class="flex justify-between mt-4">
+            <button id="prev-btn" class="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition duration-300 shadow-sm" disabled>Previous</button>
+            <button id="next-btn" class="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition duration-300 shadow-sm">Next</button>
+        </div>
+
+        <!-- Feedback & Results -->
+        <div id="feedback-container" class="mt-8">
+            <h2 class="text-xl font-bold text-gray-700 mb-4">Your Answers</h2>
+            <div id="answers-list" class="space-y-4">
+                <p class="text-gray-500 text-center">Your submitted answers will appear here.</p>
+            </div>
+        </div>
+
+        <!-- Generate File Button at the bottom -->
+        <div class="flex justify-center mt-8">
+            <button id="generate-file-btn" class="w-full sm:w-auto px-6 py-3 bg-teal-600 text-white font-bold rounded-lg hover:bg-teal-700 transition duration-300 shadow-md">Generate Answer Sheet</button>
+        </div>
+    </div>
+    
+    <!-- Modal Container -->
+    <div id="modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center p-4 z-50 hidden">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full text-center">
+            <h3 id="modal-title" class="text-xl font-bold mb-4"></h3>
+            <p id="modal-message" class="text-gray-700 mb-6"></p>
+            <button id="modal-close-btn" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">OK</button>
+        </div>
+    </div>
+
+    <!-- Firebase Scripts -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        setLogLevel('Debug');
+
+        // Global variables for Firebase
+        let app;
+        let db;
+        let auth;
+        let userId;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Game Data & State
+        const questions = [
+            { id: 1, questionWithMistake: "What are your hobbies is?", answerWithMistake: "I are like drawing.", correctQuestion: "What are your hobbies?", correctAnswer: "I like drawing." },
+            { id: 2, questionWithMistake: "What he do for a living?", answerWithMistake: "He is a student, and he love it.", correctQuestion: "What does he do for a living?", correctAnswer: "He is a student, and he loves it." },
+            { id: 3, questionWithMistake: "What does she work on?", answerWithMistake: "She working on a project.", correctQuestion: "What does she work on?", correctAnswer: "She works on a project." },
+            { id: 4, questionWithMistake: "Where you go yesterday?", answerWithMistake: "I go to the park.", correctQuestion: "Where did you go yesterday?", correctAnswer: "I went to the park." },
+            { id: 5, questionWithMistake: "They was happy with the results?", answerWithMistake: "Yes, they were very happy.", correctQuestion: "Were they happy with the results?", correctAnswer: "Yes, they were very happy." },
+            { id: 6, questionWithMistake: "Does she likes to travel?", answerWithMistake: "Yes, she love it.", correctQuestion: "Does she like to travel?", correctAnswer: "Yes, she loves it." },
+            { id: 7, questionWithMistake: "He not have a plan?", answerWithMistake: "No, he has no plan.", correctQuestion: "Does he not have a plan?", correctAnswer: "No, he has no plan." },
+            { id: 8, questionWithMistake: "What you think of the book?", answerWithMistake: "It is very good.", correctQuestion: "What do you think of the book?", correctAnswer: "It is very good." },
+            { id: 9, questionWithMistake: "Where he live?", answerWithMistake: "He live in London.", correctQuestion: "Where does he live?", correctAnswer: "He lives in London." },
+            { id: 10, questionWithMistake: "Why you say that?", answerWithMistake: "I say because I think it.", correctQuestion: "Why did you say that?", correctAnswer: "I said because I thought it." },
+            { id: 11, questionWithMistake: "What they did last night?", answerWithMistake: "They saw a movie.", correctQuestion: "What did they do last night?", correctAnswer: "They saw a movie." },
+            { id: 12, questionWithMistake: "She were at the office?", answerWithMistake: "No, she was at home.", correctQuestion: "Was she at the office?", correctAnswer: "No, she was at home." },
+            { id: 13, questionWithMistake: "The team is win?", answerWithMistake: "They win the last match.", correctQuestion: "Did the team win?", correctAnswer: "They won the last match." },
+            { id: 14, questionWithMistake: "How much did it cost?", answerWithMistake: "It costed ten dollars.", correctQuestion: "How much did it cost?", correctAnswer: "It cost ten dollars." },
+            { id: 15, questionWithMistake: "He wrote the report?", answerWithMistake: "Yes, he wrote it yesterday.", correctQuestion: "Did he write the report?", correctAnswer: "Yes, he wrote it yesterday." },
+            { id: 16, questionWithMistake: "They comes here often?", answerWithMistake: "Yes, they comes twice a week.", correctQuestion: "Do they come here often?", correctAnswer: "Yes, they come twice a week." },
+            { id: 17, questionWithMistake: "She drives a car?", answerWithMistake: "No, she not drives.", correctQuestion: "Does she drive a car?", correctAnswer: "No, she does not drive." },
+            { id: 18, questionWithMistake: "You like coffee?", answerWithMistake: "Yes, I like.", correctQuestion: "Do you like coffee?", correctAnswer: "Yes, I like coffee." },
+            { id: 19, questionWithMistake: "I am happy with my job?", answerWithMistake: "Yes, you is happy.", correctQuestion: "Are you happy with your job?", correctAnswer: "Yes, I am happy." },
+            { id: 20, questionWithMistake: "He talks too much?", answerWithMistake: "Yes, he does.", correctQuestion: "Does he talk too much?", correctAnswer: "Yes, he does." },
+            { id: 21, questionWithMistake: "They are happy?", answerWithMistake: "Yes, they is happy.", correctQuestion: "Are they happy?", correctAnswer: "Yes, they are happy." },
+            { id: 22, questionWithMistake: "She works a lot?", answerWithMistake: "Yes, she do.", correctQuestion: "Does she work a lot?", correctAnswer: "Yes, she does." },
+            { id: 23, questionWithMistake: "You listen to music?", answerWithMistake: "Yes, I listens.", correctQuestion: "Do you listen to music?", correctAnswer: "Yes, I listen to music." },
+            { id: 24, questionWithMistake: "We saw that movie?", answerWithMistake: "Yes, we saw it.", correctQuestion: "Did we see that movie?", correctAnswer: "Yes, we saw it." },
+            { id: 25, questionWithMistake: "They did not eat?", answerWithMistake: "No, they did not ate.", correctQuestion: "Did they not eat?", correctAnswer: "No, they did not eat." }
+        ];
+
+        let currentQuestionIndex = 0;
+
+        const questionNumberEl = document.getElementById('question-number');
+        const questionMistakeEl = document.getElementById('question-mistake');
+        const answerMistakeEl = document.getElementById('answer-mistake');
+        const questionInput = document.getElementById('question-input');
+        const answerInput = document.getElementById('answer-input');
+        const saveBtn = document.getElementById('save-btn');
+        const generateFileBtn = document.getElementById('generate-file-btn');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const answersListEl = document.getElementById('answers-list');
+        const userIdEl = document.getElementById('user-id');
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+
+        // Initialize Firebase and Auth
+        async function initializeFirebase() {
+            try {
+                if (Object.keys(firebaseConfig).length) {
+                    app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                    userId = auth.currentUser.uid;
+                    userIdEl.textContent = userId;
+                    fetchAnswers();
+                } else {
+                    showModal("Firebase Error", "Firebase configuration is missing. The application will not be able to save your answers. You can still play the game locally.");
+                    console.error("Firebase config is missing.");
+                }
+            } catch (error) {
+                showModal("Authentication Error", `Failed to authenticate with Firebase: ${error.message}. You can still play the game locally.`);
+                console.error("Firebase Authentication Error:", error);
+            }
+        }
+
+        function showModal(title, message) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modal.classList.remove('hidden');
+        }
+
+        modalCloseBtn.addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+
+        // Game Functions
+        function renderQuestion() {
+            const question = questions[currentQuestionIndex];
+            if (!question) return;
+
+            questionNumberEl.textContent = `Question ${currentQuestionIndex + 1} of ${questions.length}`;
+            questionMistakeEl.textContent = question.questionWithMistake;
+            answerMistakeEl.textContent = question.answerWithMistake;
+            questionInput.value = '';
+            answerInput.value = '';
+            
+            prevBtn.disabled = currentQuestionIndex === 0;
+            nextBtn.disabled = currentQuestionIndex === questions.length - 1;
+        }
+
+        async function saveAnswer(answerData) {
+            if (!db || !userId) {
+                console.warn("Firestore not initialized. Answer will not be saved.");
+                return;
+            }
+
+            const docRef = doc(db, `artifacts/${appId}/users/${userId}/game-answers`, `q${answerData.questionId}`);
+            
+            try {
+                await setDoc(docRef, answerData);
+                console.log("Answer saved successfully!");
+                showModal("Success!", "Your answer has been saved.");
+            } catch (e) {
+                console.error("Error saving document: ", e);
+                showModal("Error", "Failed to save your answer. Please check the console for details.");
+            }
+        }
+
+        function fetchAnswers() {
+            if (!db || !userId) {
+                console.warn("Firestore not initialized. Cannot fetch answers.");
+                return;
+            }
+
+            const answersColRef = collection(db, `artifacts/${appId}/users/${userId}/game-answers`);
+            onSnapshot(answersColRef, (snapshot) => {
+                answersListEl.innerHTML = '';
+                if (snapshot.empty) {
+                    answersListEl.innerHTML = '<p class="text-gray-500 text-center">Your submitted answers will appear here.</p>';
+                    return;
+                }
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    answersListEl.innerHTML += `
+                        <div class="p-4 rounded-lg shadow-sm border border-gray-200">
+                            <p class="font-semibold text-gray-900">Q${data.questionId}:</p>
+                            <p class="text-sm">Your Corrected Q: <span class="font-medium">${data.userQuestion}</span></p>
+                            <p class="text-sm">Your Corrected A: <span class="font-medium">${data.userAnswer}</span></p>
+                        </div>
+                    `;
+                });
+            });
+        }
+
+        // Event Listeners
+        saveBtn.addEventListener('click', () => {
+            const userQuestion = questionInput.value.trim();
+            const userAnswer = answerInput.value.trim();
+
+            if (!userQuestion || !userAnswer) {
+                showModal("Empty Answer", "Please fill in both the corrected question and answer before saving.");
+                return;
+            }
+
+            const currentQuestion = questions[currentQuestionIndex];
+            const answerData = {
+                questionId: currentQuestion.id,
+                userQuestion: userQuestion,
+                userAnswer: userAnswer,
+                timestamp: new Date().toISOString()
+            };
+
+            // Save text answer
+            saveAnswer(answerData);
+        });
+
+        generateFileBtn.addEventListener('click', async () => {
+            if (!db || !userId) {
+                showModal("Error", "Firestore is not initialized. Cannot generate the file.");
+                return;
+            }
+
+            try {
+                const answersRef = collection(db, `artifacts/${appId}/users/${userId}/game-answers`);
+                const querySnapshot = await getDocs(answersRef);
+                
+                let fileContent = `# My Grammar Game Answers\n\n`;
+                fileContent += `This is a summary of your submitted answers. You can use this to review your work.\n\n`;
+                
+                const submittedAnswers = [];
+                querySnapshot.forEach(doc => {
+                    submittedAnswers.push(doc.data());
+                });
+
+                // Sort answers by question ID
+                submittedAnswers.sort((a, b) => a.questionId - b.questionId);
+
+                submittedAnswers.forEach(data => {
+                    const originalQuestion = questions.find(q => q.id === data.questionId);
+                    if (originalQuestion) {
+                        fileContent += `---
+### Question ${data.questionId}
+* **Original Q:** "${originalQuestion.questionWithMistake}"
+* **Original A:** "${originalQuestion.answerWithMistake}"
+* **Your Corrected Q:** "${data.userQuestion}"
+* **Your Corrected A:** "${data.userAnswer}"\n\n`;
+                    }
+                });
+
+                const finalContent = fileContent;
+                
+                console.log(`\`\`\`markdown:Answer Sheet:answer_sheet.md\n${finalContent}\n\`\`\`eof`);
+                showModal("Success", "Your answer sheet is being generated!");
+
+            } catch (error) {
+                console.error("Error generating file: ", error);
+                showModal("Error", "Failed to generate the answer sheet. Please check the console for details.");
+            }
+        });
+        
+        prevBtn.addEventListener('click', () => {
+            if (currentQuestionIndex > 0) {
+                currentQuestionIndex--;
+                renderQuestion();
+            }
+        });
+        
+        nextBtn.addEventListener('click', () => {
+            if (currentQuestionIndex < questions.length - 1) {
+                currentQuestionIndex++;
+                renderQuestion();
+            }
+        });
+
+        // Initialize on window load
+        window.onload = () => {
+            initializeFirebase();
+            renderQuestion();
+        };
+    </script>
+</body>
+</html>
